@@ -29,7 +29,7 @@ public class BParticleSimMesh : MonoBehaviour
         public Vector3 velocity;                // velocity information
         public float mass;                      // mass information
         public BContactSpring contactSpring;    // Special spring for contact forces
-        public bool attachedToContact;          // is thi sparticle currently attached to a contact (ground plane contact)
+        public bool attachedToContact;          // is this particle currently attached to a contact (ground plane contact)
         public List<BSpring> attachedSprings;   // all attached springs, as a list in case we want to modify later fast
         public Vector3 currentForces;           // accumulate forces here on each step        
     }
@@ -41,33 +41,63 @@ public class BParticleSimMesh : MonoBehaviour
     }
 
     public float contactSpringKS = 1000.0f;     // contact spring coefficient with default 1000
-    public float contactSpringKD = 20.0f;       // contact spring daming coefficient with default 20
+    public float contactSpringKD = 20.0f;       // contact spring damping coefficient with default 20
 
     public float defaultSpringKS = 100.0f;      // default spring coefficient with default 100
-    public float defaultSpringKD = 1.0f;        // default spring daming coefficient with default 1
+    public float defaultSpringKD = 1.0f;        // default spring damping coefficient with default 1
 
     public bool debugRender = false;            // To render or not to render
+
+    /*** a taylor's note (from BrightSpace instructions):
+    * ground contact penalty spring eq. =
+    * -ks((particle position - ground plane point)dot.ground plane normal)*ground plane normal - contact penalty spring damping coefficient*particle velocity
+    * 
+    * -BContactSpring.ks(BParticle.position - BPlane.position)dot.BPlane.normal - BContactSpring.kd * BParticle.velocity
+    * 
+    * eq in code: Vector3 contactForce = -BParticle.contactSpring.ks * Vector3.Dot(BParticle.position - BParticle.contactSpring.attachPoint, BPlane.normal) * BPlane.normal - BParticle.contactSpring.kd * BParticle.velocity;
+    * 
+    * cont. BParticle.currentForces += contactForce
+    * 
+    ***/
+
+    /*** a taylor's note (from BrightSpace instructions):
+     * particle-particle spring equation ** not same values as variables above
+     * 
+     * ks((l - |particle1 pos - particle2 pos|) (particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|) - kd((particle1 velocity - particle2 velocity)Dot((particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|)) * (particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|)
+     * 
+     * BParticle1.BSpring.ks * ((BParticle1.BSpring.restLength - |BParticle1.position - BParticle2.position|) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|))) - (BParticle1.BSpring.kd * (BParticle1.velocity - BParticle2.velocity)Dot.((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)))
+     * 
+     ***/
 
 
     /*** 
      * I've given you all of the above to get you started
      * Here you need to publicly provide the:
      * - the ground plane transform (Transform)
+     * 
      * - handlePlaneCollisions flag (bool)
+     * 
      * - particle mass (float)
+     * 
      * - useGravity flag (bool)
+     * 
      * - gravity value (Vector3)
+     * 
+     * 
      * Here you need to privately provide the:
      * - Mesh (Mesh)
+     * 
      * - array of particles (BParticle[])
+     * 
      * - the plane (BPlane)
+     * 
      ***/
 
 
 
     /// <summary>
     /// Init everything
-    /// HINT: in particular you should probbaly handle the mesh, init all the particles, and the ground plane
+    /// HINT: in particular you should probabaly handle the mesh, init all the particles, and the ground plane
     /// HINT 2: I'd for organization sake put the init particles and plane stuff in respective functions
     /// HINT 3: Note that mesh vertices when accessed from the mesh filter are in local coordinates.
     ///         This script will be on the object with the mesh filter, so you can use the functions
