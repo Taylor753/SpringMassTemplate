@@ -1,27 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
-/*** a taylor's note (from BrightSpace instructions):
-* ground contact penalty spring eq. =
-* -ks((particle position - ground plane point)dot.ground plane normal)*ground plane normal - contact penalty spring damping coefficient*particle velocity
-* 
-* -BContactSpring.ks(BParticle.position - BPlane.position)dot.BPlane.normal - BContactSpring.kd * BParticle.velocity
-* 
-* eq in code: Vector3 contactForce = -BParticle.contactSpring.ks * Vector3.Dot(BParticle.position - BParticle.contactSpring.attachPoint, BPlane.normal) * BPlane.normal - BParticle.contactSpring.kd * BParticle.velocity;
-* 
-* cont. BParticle.currentForces += contactForce
-* 
-***/
-
-/*** a taylor's note (from BrightSpace instructions):
- * particle-particle spring equation ** not same values as variables above
- * 
- * ks((l - |particle1 pos - particle2 pos|) (particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|) - kd((particle1 velocity - particle2 velocity)Dot((particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|)) * (particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|)
- * 
- * BParticle1.BSpring.ks * ((BParticle1.BSpring.restLength - |BParticle1.position - BParticle2.position|) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|))) - (BParticle1.BSpring.kd * (BParticle1.velocity - BParticle2.velocity)Dot.((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)))
- * 
- ***/
+// hints, taylor's notes, and other instruction comments moved the very end
 
 // Check this out we can require components be on a game object!
 [RequireComponent(typeof(MeshFilter))]
@@ -69,22 +49,6 @@ public class BParticleSimMesh : MonoBehaviour
 
     public bool debugRender = false;            // To render or not to render
 
-    /*** 
-     * I've given you all of the above to get you started
-     * Here you need to publicly provide the:
-     * - the ground plane transform (Transform)
-     * - handlePlaneCollisions flag (bool)
-     * - particle mass (float)
-     * - useGravity flag (bool)
-     * - gravity value (Vector3)
-     * 
-     * Here you need to privately provide the:
-     * - Mesh (Mesh)
-     * - array of particles (BParticle[])
-     * - the plane (BPlane)
-     * 
-     ***/
-
     public Transform groundPlaneTransform;
     public bool handlePlaneCollisions = false; // set default value 
     public float particleMass = 1.0f; // set default value 
@@ -95,35 +59,24 @@ public class BParticleSimMesh : MonoBehaviour
     private BParticle[] particles;
     private BPlane plane; 
 
-    /// <summary>
-    /// Init everything
-    /// HINT: in particular you should probabaly handle the mesh, init all the particles, and the ground plane
-    /// HINT 2: I'd for organization sake put the init particles and plane stuff in respective functions
-    /// HINT 3: Note that mesh vertices when accessed from the mesh filter are in local coordinates.
-    ///         This script will be on the object with the mesh filter, so you can use the functions
-    ///         transform.TransformPoint and transform.InverseTransformPoint accordingly 
-    ///         (you need to operate on world coordinates, and render in local)
-    /// HINT 4: the idea here is to make a mathematical particle object for each vertex in the mesh, then connect
-    ///         each particle to every other particle. Be careful not to double your springs! There is a simple
-    ///         inner loop approach you can do such that you attached exactly one spring to each particle pair
-    ///         on initialization. Then when updating you need to remember a particular trick about the spring forces
-    ///         generated between particles. 
-    /// </summary>
     void Start()
     {
-        // Mesh = GetComponent<MeshFilter>().mesh;
-        // InitParticles();
-        // InitPlane();
-        // InitSprings();
-    }
+        //first thing, because GroundPlane in Unity project is NOT set a y=0, we need to retrieve that!
+        GameObject ground = GameObject.Find("GroundPlane");
+        if (ground != null)
+        {
+            groundPlaneTransform = ground.GetComponent<Transform>();
+        }
+        else
+        {
+            Debug.LogWarning("GroundPlane object not found!!!!!");
+        }
 
-    /*** BIG HINT: My solution code has as least the following functions
-     * InitParticles()
-     * InitPlane()
-     * UpdateMesh() (remember the hint above regarding global and local coords)
-     * ResetParticleForces()
-     * ...
-     ***/
+        Mesh = GetComponent<MeshFilter>().mesh;
+        InitParticles();
+        InitPlane();
+        InitSprings();
+    }
 
     private void InitParticles()
     {
@@ -156,7 +109,17 @@ public class BParticleSimMesh : MonoBehaviour
 
     private void InitSprings()
     {
-
+        for (int i = 0; i < particles.Length; i++)
+        {
+            for (int j = i + 1; j < particles.Length; j++)
+            {
+                float restL = (particles[i].position - particles[j].position).magnitude;
+                BSpring thisSpring = new BSpring{ks = defaultSpringKS, kd = defaultSpringKD, restLength = restL, attachedParticle = j};
+                BParticle p = particles[i];
+                p.attachedSprings.Add(thisSpring);
+                particles[i] = p;
+            }
+        }
     }
 
     private void ResetParticleForces()
@@ -167,9 +130,15 @@ public class BParticleSimMesh : MonoBehaviour
         }
     }
 
-    private void ParticleIntegration()
+    private void ParticleIntegration(float dt) //where dt = delta time = change in time
     {
-
+        for (int i = 0; i < particles.Length; i++)
+        {
+            BParticle p = particles[i];
+            p.velocity += (p.currentForces / p.mass) * dt;
+            p.position += p.velocity * dt;
+            particles[i] = p;
+        }
     }
 
     private void ComputeAllForces()
@@ -209,7 +178,7 @@ public class BParticleSimMesh : MonoBehaviour
                 p1.currentForces += springForce;
                 p2.currentForces -= springForce;
 
-                // write back p2 since structs are value types
+                // write back p2
                 particles[theSpring.attachedParticle] = p2;
             }
             particles[i] = p1;
@@ -226,6 +195,7 @@ public class BParticleSimMesh : MonoBehaviour
                 float aboveOrBelow = Vector3.Dot(p.position - plane.position, plane.normal);
                 if (aboveOrBelow < 0f) //point is below the plane
                 {
+                    /*
                     // nearest point on plane (for attach point)
                     Vector3 nearestPoint = p.position - aboveOrBelow * plane.normal;
 
@@ -235,6 +205,22 @@ public class BParticleSimMesh : MonoBehaviour
                     p.currentForces += contactForce;
                     p.attachedToContact = true;
                     p.contactSpring.attachPoint = nearestPoint; // updated for accuracy
+                    */
+                    // nearest point on plane
+                    Vector3 nearestPoint = p.position - aboveOrBelow * plane.normal;
+
+                    // set attach point only when first contact occurs
+                    if (!p.attachedToContact)
+                        p.contactSpring.attachPoint = nearestPoint;
+
+                    // compute penetration relative to attachPoint
+                    float penetrationDepth = Vector3.Dot(p.position - p.contactSpring.attachPoint, plane.normal);
+
+                    // apply penalty spring using penetration depth
+                    Vector3 contactForce = -p.contactSpring.ks * penetrationDepth * plane.normal - p.contactSpring.kd * p.velocity;
+
+                    p.currentForces += contactForce;
+                    p.attachedToContact = true;
                 }
                 else
                 {
@@ -247,7 +233,15 @@ public class BParticleSimMesh : MonoBehaviour
 
     private void UpdateMesh()
     {
-
+        //vertices in local space
+        Vector3[] localVertices = Mesh.vertices;
+        for (int i = 0; i < localVertices.Length; i++)
+        {
+            localVertices[i] = transform.InverseTransformPoint(particles[i].position);
+        }
+        Mesh.vertices = localVertices;
+        Mesh.RecalculateNormals();
+        Mesh.RecalculateBounds();
     }
 
     /// <summary>
@@ -255,7 +249,7 @@ public class BParticleSimMesh : MonoBehaviour
     /// </summary>
     public void Update()
     {
-        /* This will work if you have a correctly made particles array
+        // This will work if you have a correctly made particles array
         if (debugRender)
         {
             int particleCount = particles.Length;
@@ -270,7 +264,7 @@ public class BParticleSimMesh : MonoBehaviour
                 }
             }
         }
-        */
+        // */
     }
 
     private void FixedUpdate()
@@ -280,3 +274,66 @@ public class BParticleSimMesh : MonoBehaviour
         UpdateMesh();
     }
 }
+
+/*** a taylor's note (from BrightSpace instructions):
+* ground contact penalty spring eq. =
+* -ks((particle position - ground plane point)dot.ground plane normal)*ground plane normal - contact penalty spring damping coefficient*particle velocity
+* 
+* -BContactSpring.ks(BParticle.position - BPlane.position)dot.BPlane.normal - BContactSpring.kd * BParticle.velocity
+* 
+* eq in code: Vector3 contactForce = -BParticle.contactSpring.ks * Vector3.Dot(BParticle.position - BParticle.contactSpring.attachPoint, BPlane.normal) * BPlane.normal - BParticle.contactSpring.kd * BParticle.velocity;
+* 
+* cont. BParticle.currentForces += contactForce
+* 
+***/
+
+/*** a taylor's note (from BrightSpace instructions):
+ * particle-particle spring equation ** not same values as variables above
+ * 
+ * ks((l - |particle1 pos - particle2 pos|) (particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|) - kd((particle1 velocity - particle2 velocity)Dot((particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|)) * (particle1 pos - particle2 pos) / (|particle1 pos - particle2 pos|)
+ * 
+ * BParticle1.BSpring.ks * ((BParticle1.BSpring.restLength - |BParticle1.position - BParticle2.position|) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|))) - (BParticle1.BSpring.kd * (BParticle1.velocity - BParticle2.velocity)Dot.((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)))
+ * 
+ ***/
+
+
+/*** 
+ * I've given you all of the above to get you started
+ * Here you need to publicly provide the:
+ * - the ground plane transform (Transform)
+ * - handlePlaneCollisions flag (bool)
+ * - particle mass (float)
+ * - useGravity flag (bool)
+ * - gravity value (Vector3)
+ * 
+ * Here you need to privately provide the:
+ * - Mesh (Mesh)
+ * - array of particles (BParticle[])
+ * - the plane (BPlane)
+ * 
+ ***/
+
+
+/// <summary>
+/// Init everything
+/// HINT: in particular you should probabaly handle the mesh, init all the particles, and the ground plane
+/// HINT 2: I'd for organization sake put the init particles and plane stuff in respective functions
+/// HINT 3: Note that mesh vertices when accessed from the mesh filter are in local coordinates.
+///         This script will be on the object with the mesh filter, so you can use the functions
+///         transform.TransformPoint and transform.InverseTransformPoint accordingly 
+///         (you need to operate on world coordinates, and render in local)
+/// HINT 4: the idea here is to make a mathematical particle object for each vertex in the mesh, then connect
+///         each particle to every other particle. Be careful not to double your springs! There is a simple
+///         inner loop approach you can do such that you attached exactly one spring to each particle pair
+///         on initialization. Then when updating you need to remember a particular trick about the spring forces
+///         generated between particles. 
+/// </summary>
+
+
+/*** BIG HINT: My solution code has as least the following functions
+ * InitParticles()
+ * InitPlane()
+ * UpdateMesh() (remember the hint above regarding global and local coords)
+ * ResetParticleForces()
+ * ...
+ ***/
