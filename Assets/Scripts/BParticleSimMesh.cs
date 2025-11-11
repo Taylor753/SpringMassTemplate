@@ -111,7 +111,10 @@ public class BParticleSimMesh : MonoBehaviour
     /// </summary>
     void Start()
     {
-
+        // Mesh = GetComponent<MeshFilter>().mesh;
+        // InitParticles();
+        // InitPlane();
+        // InitSprings();
     }
 
     /*** BIG HINT: My solution code has as least the following functions
@@ -151,12 +154,22 @@ public class BParticleSimMesh : MonoBehaviour
         }
     }
 
+    private void InitSprings()
+    {
+
+    }
+
     private void ResetParticleForces()
     {
         for (int i = 0; i < particles.Length; i++)
         {
             particles[i].currentForces = Vector3.zero;
         }
+    }
+
+    private void ParticleIntegration()
+    {
+
     }
 
     private void ComputeAllForces()
@@ -179,18 +192,25 @@ public class BParticleSimMesh : MonoBehaviour
         //particle-particle spring forces **recall no mesh-mesh as per instructions
         for (int i = 0; i < particleCount; i++)
         {
-            BParticle p1 = particles[i]; // particle1: (we need to pull particle1 from the particles list)
+            BParticle p1 = particles[i];
             for (int j = 0; j < p1.attachedSprings.Count; j++)
             {
                 BSpring theSpring = p1.attachedSprings[j];
-                BParticle p2 = particles[theSpring.attachedParticle]; //particle2 is pulled from what is attached to the p1
+                BParticle p2 = particles[theSpring.attachedParticle];
+
                 //prepping dir and dist before subbing them into the particle-particle spring eq to simplify it somewhat
                 Vector3 theDirection = (p1.position - p2.position).normalized;
                 float theDistance = (p1.position - p2.position).magnitude;
-                // from taylor's notes/BS, translated to code:
-                // * BParticle1.BSpring.ks * ((BParticle1.BSpring.restLength - |BParticle1.position - BParticle2.position|) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|))) - (BParticle1.BSpring.kd * (BParticle1.velocity - BParticle2.velocity)Dot.((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)) * ((BParticle1.position - BParticle2.position) / (|BParticle1.position - BParticle2.position|)))
+
+                // particle-particle spring equation (from taylor's notes/BS)
                 Vector3 springForce = theSpring.ks * (theSpring.restLength - theDistance) * theDirection - theSpring.kd * Vector3.Dot(p1.velocity - p2.velocity, theDirection) * theDirection;
+
+                // apply equal and opposite forces to both particles
                 p1.currentForces += springForce;
+                p2.currentForces -= springForce;
+
+                // write back p2 since structs are value types
+                particles[theSpring.attachedParticle] = p2;
             }
             particles[i] = p1;
         }
@@ -206,12 +226,15 @@ public class BParticleSimMesh : MonoBehaviour
                 float aboveOrBelow = Vector3.Dot(p.position - plane.position, plane.normal);
                 if (aboveOrBelow < 0f) //point is below the plane
                 {
-                    //ground contact penalty spring eq. from taylor's notes/BS, translated to code:
-                    //Vector3 contactForce = -BParticle.contactSpring.ks * Vector3.Dot(BParticle.position - BParticle.contactSpring.attachPoint, BPlane.normal) * BPlane.normal - BParticle.contactSpring.kd * BParticle.velocity;
+                    // nearest point on plane (for attach point)
+                    Vector3 nearestPoint = p.position - aboveOrBelow * plane.normal;
+
+                    //ground contact penalty spring eq. from taylor's notes/BS
                     Vector3 contactForce = -p.contactSpring.ks * aboveOrBelow * plane.normal - p.contactSpring.kd * p.velocity;
+
                     p.currentForces += contactForce;
                     p.attachedToContact = true;
-                    p.contactSpring.attachPoint = plane.position;
+                    p.contactSpring.attachPoint = nearestPoint; // updated for accuracy
                 }
                 else
                 {
@@ -248,5 +271,12 @@ public class BParticleSimMesh : MonoBehaviour
             }
         }
         */
+    }
+
+    private void FixedUpdate()
+    {
+        ComputeAllForces();
+        ParticleIntegration(Time.fixedDeltaTime);
+        UpdateMesh();
     }
 }
